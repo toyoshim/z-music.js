@@ -73,13 +73,16 @@ $(OUT)/%.o: $(MOD68)/%.c
 $(OUT)/%.o: $(RUN68)/%.c
 	$(CC) $(CFLAGS) -o $@ $<
 
-.PHONY: all clean depend
+.PHONY: all clean depend dist
 all: $(DEPEND) $(TARGET)
 
 clean:
 	rm -rf $(OUT) $(TARGET)
 
 depend: $(DEPEND)
+
+dist: all
+	cp $(TARGET) dist/
 
 $(DEPEND): $(CSRCS) $(CXXSRCS) Makefile
 	mkdir -p $(OUT)
