@@ -14,8 +14,8 @@ DEFS	= -DFNC_TRACE -DENV_FROM_INI -DEMSCRIPTEN_KEEPR
 INCS	= -include $(MOD68)/preinc.h -I $(RUN68) -I $(OPM) -I $(ZMSC2)/compat
 CFLAGS	= $(DEFS) $(INCS) -Oz
 CXXFLAGS= $(CFLAGS) -fno-operator-names
-ZMFUNCS	= '_zmusic_init', '_zmusic_update', '_zmusic_trap'
-EXPORTS	= -s EXPORTED_FUNCTIONS="['_main', $(ZMFUNCS)]"
+ZMFUNCS	= '_zmusic_init', '_zmusic_update', '_zmusic_trap', '_zmusic_copy'
+EXPORTS	= -s EXPORTED_FUNCTIONS="['_main', '_mem_get', '_mem_set', $(ZMFUNCS)]"
 RUNTIME	= --js-library $(ZMSC2)/runtime68.js
 EMBED	= --embed-file x/ZMUSIC110.X@ZMUSIC110.X \
 	  --embed-file x/ZMUSIC208.X@ZMUSIC208.X

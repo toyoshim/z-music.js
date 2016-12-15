@@ -6,6 +6,7 @@ extern "C" {
 
 ULong zmusic_trap3 = 0;
 ULong zmusic_timer = 0;
+ULong zmusic_driver = 0xFFFFFFFF;
 char* zmusic_work = NULL;
 
 }
@@ -14,6 +15,7 @@ char* zmusic_work = NULL;
 
 #include <fcntl.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -109,6 +111,72 @@ extern "C" void zmusic_trap(
   SR_S_ON();
   while (pc && FALSE == prog_exec());
   //printf("ZMUSIC LEAVE => $%08x\n", rd[0]);
+}
+
+extern "C" void zmusic_copy(ULong size) {
+  if (prog_ptr[zmusic_driver + 14] != 'O' ||
+      prog_ptr[zmusic_driver + 15] != 'P' ||
+      prog_ptr[zmusic_driver + 16] != 'M' ||
+      prog_ptr[zmusic_driver + 17] != ' ') {
+    printf("OPM dirver not found\n");
+  }
+  ULong strategy = mem_get(zmusic_driver + 6, S_LONG);
+  ULong interrupt = mem_get(zmusic_driver + 10, S_LONG);
+
+  // Setup the request.
+  ra[5] = 0x200000 - size - 22;
+  mem_set(ra[5] + 0, 26, S_BYTE);
+  mem_set(ra[5] + 2, 8, S_BYTE);
+  mem_set(ra[5] + 14, ra[5] + 22, S_LONG);
+  mem_set(ra[5] + 18, size, S_LONG);
+
+  // Stores a request of A5 by calling strategy entry.
+  pc = 0;
+  ra[7] -= 4;
+  mem_set(ra[7], pc, S_LONG);
+  pc = strategy;
+  while (pc && FALSE == prog_exec());
+  
+
+  // Calls interrupt entry that serves a queued reuqest.
+  pc = 0;
+  ra[7] -= 4;
+  mem_set(ra[7], pc, S_LONG);
+  pc = interrupt;
+  SR_S_ON();
+  while (pc && FALSE == prog_exec());
+
+  UChar errorLow = zmusic_work[0x100000 - size - 22 + 3];
+  UChar errorHigh = zmusic_work[0x100000 - size - 22 + 4];
+  if (errorLow != 0 || errorHigh != 0) {
+    printf("COPY to OPM ERROR: $%02x%02x\n", errorHigh, errorLow);
+    return;
+  }
+
+  // Send EOF. 
+  ra[5] = 0x200000 - 22;
+  mem_set(ra[5] + 0, 26, S_BYTE);
+  mem_set(ra[5] + 2, 8, S_BYTE);
+  mem_set(ra[5] + 14, 0, S_LONG);
+  mem_set(ra[5] + 18, 0, S_LONG);
+  
+  pc = 0;
+  ra[7] -= 4;
+  mem_set(ra[7], pc, S_LONG);
+  pc = strategy;
+  while (pc && FALSE == prog_exec());
+
+  pc = 0;
+  ra[7] -= 4;
+  mem_set(ra[7], pc, S_LONG);
+  pc = interrupt;
+  SR_S_ON();
+  while (pc && FALSE == prog_exec());
+  
+  errorLow = zmusic_work[0x100000 - size - 22 + 3];
+  errorHigh = zmusic_work[0x100000 - size - 22 + 4];
+  if (errorLow != 0 || errorHigh != 0)
+    printf("COPY to OPM ERROR: $%02x%02x\n", errorHigh, errorLow);
 }
 
 extern "C" int pcm8_call() {

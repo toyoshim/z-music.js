@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include "run68.h"
 
+extern ULong zmusic_driver;
 extern char* zmusic_work;
 extern void zmusic_set_reg(UChar reg);
 extern void zmusic_set_val(UChar val);
@@ -29,7 +30,7 @@ static int hsync = 0x80;
 long mem_get(long adr, char size) {
   UChar   *mem;
   long	d;
-  
+
   adr &= 0x00FFFFFF;
   mem = (UChar*)prog_ptr + adr;
   if (adr < ENV_TOP || adr >= mem_aloc) {
@@ -60,10 +61,10 @@ long mem_get(long adr, char size) {
       // This is the device attribute of NUL driver header.
       if (adr == 0x006814)
         return 0x8024;
-      // Last, it reads founc address - 14 to check the next driver. Returns
+      // Last, it reads found address - 14 to check the next driver. Returns
       // 0xFFFFFFFF to express this is the last one.
       if (adr == 0x006810)
-        return 0xFFFFFFFF;
+        return zmusic_driver;
       return ' ';
     }
 
@@ -135,6 +136,9 @@ void mem_set(long adr, long d, char size)
       return;
     if (adr == 0x000228)  // MIDI FIFO-Rx ready vector.
       return;
+
+    if (adr == 0x006810)  // Z-MUSIC will be installed as a device driver here.
+      zmusic_driver = d;
 
     // MFP IMRB
     if (adr == 0xE88015)

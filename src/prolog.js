@@ -68,7 +68,7 @@ var Module = {
   // Default arguments.
   arguments: [
     'ZMUSIC208.X',
-    '-T0',    // Allocate 0kB for track buffer.
+    '-T100',  // Allocate 100kB for track buffer.
     '-P0',    // Allocate 0kB for ADPCM data buffer.
     '-W100',  // Allocate 100kB for work area.
   ],
@@ -86,7 +86,7 @@ window.ZMUSIC = {
   PLAYING: "playing",    // started and play() is called
 
   state: "inactive",
-  version: "0.9.0",
+  version: "0.9.1",
 
   /**
    * Initializes Z-MUSIC system to accept other requests.
@@ -138,10 +138,12 @@ window.ZMUSIC = {
       Module._zmusic_trap(0x46, 0, 0, 0, 0x100008, null);
     }
 
-    var m8 = new Uint8Array(zmd);
-    for (var i = 0; i < zmd.byteLength; ++i)
-      Module.HEAPU8[zmusicBuffer + 0x080000 + i] = m8[i];
-    Module._zmusic_trap(0x11, 0, 0, 0, 0x180007, null);
+    if (zmd) {
+      var m8 = new Uint8Array(zmd);
+      for (var i = 0; i < zmd.byteLength; ++i)
+        Module.HEAPU8[zmusicBuffer + 0x080000 + i] = m8[i];
+      Module._zmusic_trap(0x11, 0, 0, 0, 0x180007, null);
+    }
     zmusicPlaying = true;
   },
 
@@ -155,7 +157,53 @@ window.ZMUSIC = {
 
     Module._zmusic_trap(0x0a, 0, 0, 0, 0, null);
     zmusicPlaying = false;
-  }
+  },
 
-  // TODO: ZMS and fade-in/out support
+  /**
+   * Plays ZMS data after compiling it.
+   * @param {ArrayBuffer} data to write
+   */
+  compileAndPlay: function (data) {
+    var d8 = new Uint8Array(data);
+    for (var i = 0; i < data.byteLength; ++i)
+      Module.HEAPU8[zmusicBuffer + 0x100000 - data.byteLength + i] = d8[i];
+    Module._zmusic_copy(data.byteLength);
+    Module._zmusic_trap(0x08, 0, 0, 0, 0, null);
+  },
+
+  /**
+   * Emulates trap #3 with specified register values set.
+   * @param d1 {number} d1 register value
+   * @param d2 {number} d2 register value
+   * @param d3 {number} d3 register value
+   * @param d4 {number} d4 register value
+   * @param a1 {number} a1 register value, could be [0x100000:0x1FFFFF]
+   * @param data {ArrayBuffer} data that should be stored at a1 address
+   */
+  _trap3: function (d1, d2, d3, d4, a1, data) {
+    if (a1 && data) {
+      var d8 = new Uint8Array(data);
+      for (var i = 0; i < data.byteLength; ++i)
+      Module.HEAPU8[zmusicBuffer + a1 - 0x100000 + i] = d8[i];
+    }
+    return Module._zmusic_trap(d1, d2, d3, d4, a1, null);
+  },
+
+  /**
+   * Peeks X68000 memory by long word.
+   * @param addr {number} address
+   * @return {number} data
+   */
+  _peek: function (addr) {
+    return Module._mem_get(addr, 2) & 0xffffffff;
+  },
+
+  /**
+   * Pokes X68000 memory by long word.
+   * @param addr {number} address
+   * @param data {number} data
+   */
+  _poke: function (addr) {
+    Module._mem_set(addr, data, 2);
+  }
 };
