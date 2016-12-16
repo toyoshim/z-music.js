@@ -7,6 +7,7 @@
 
 extern ULong zmusic_driver;
 extern char* zmusic_work;
+extern void jsrt_midi_out(UChar data);
 extern void zmusic_set_reg(UChar reg);
 extern void zmusic_set_val(UChar val);
 
@@ -25,7 +26,10 @@ void run68_abort(long adr) {
   abort();
 }
 
-static int hsync = 0x80;
+static int hvsync = (0x80 | 0x10);
+static int midi_group = 0;
+static int midi_data = -1;
+static int midi = 0;
 
 long mem_get(long adr, char size) {
   UChar   *mem;
@@ -75,8 +79,8 @@ long mem_get(long adr, char size) {
 
     // ZMUSIC counts H-SYNC flips for waiting a little.
     if (adr == 0xE88001) {  // MFP GPIP
-      hsync ^= 0x80;
-      return 0xFF ^ hsync;
+      hvsync ^= (0x80 | 0x10);
+      return 0xFF ^ hvsync;
     }
 
     if (adr == 0xE88015)    // MFP IMRB
@@ -93,6 +97,29 @@ long mem_get(long adr, char size) {
     // 8255 Port A - JOYPAD #0 registers.
     if (adr == 0xE9A001)
       return 0xFF;
+
+    // MIDI board.
+    if (adr == 0xEAFA03) {  // R01: Register Group.
+      return midi_group;
+    }
+    if (adr == 0xEAFA09 || adr == 0xEAFA0B ||
+        adr == 0xEAFA0D || adr == 0xEAFA0F) {
+      int r = midi_group * 10 + (adr - 0xEAFA09) / 2 + 4;
+      switch (r) {
+        case 54:  // R54: FIFO-Tx Status.
+          // Need to say it's ready, but not empty if data is recently put.
+          if (midi_data >= 0) {
+            midi_data = -1;  // Will say being empty at the next time.
+            return 0x40;  // Buffer is not empty, but ready.
+          }
+          return 0xc0;  // Buffer is empty and ready.
+        case 56:  // R56: FIFO-Tx Data.
+          return midi_data & 0xff;
+        default:
+          printf("INFO: RD R%02d => $%02x\n", r, 0x00);
+          return 0x0;
+      }
+    }
 
     // ZMUSIC virtual work area to realize remote PLAY_CNV_DATA.
     if (0x100000 <= adr && adr < 0x200000) {
@@ -153,6 +180,48 @@ void mem_set(long adr, long d, char size)
       zmusic_set_val(d);
       return;
     }
+
+    // MIDI board.
+    if (adr == 0xEAFA03) {  // R01: Register Group
+      midi_group = d & 0x0f;
+      return;
+    }
+    if (adr == 0xEAFA07) {  // R03: Interrupt Clear
+      return;
+    }
+    if (adr == 0xEAFA09 || adr == 0xEAFA0B ||
+        adr == 0xEAFA0D || adr == 0xEAFA0F) {
+      int r = midi_group * 10 + (adr - 0xEAFA09) / 2 + 4;
+      switch (r) {
+        case  4:  // R04: Interrupt Vector Offset
+        case  5:  // R05: Interrupt Mode Control
+        case  6:  // R06: Interrupt Enable
+        case 14:  // R14: MIDI Realtime Message Control
+        case 24:  // R24: Rx Communication Rate
+        case 25:  // R25: Rx Communication Mode
+        case 35:  // R35: FIFO-Rx Control
+        case 44:  // R44: Tx Communication Rate
+        case 55:  // R55: FIFO-Tx Control
+          return;
+        case 56:  // R56: FIFO-Tx Data
+          midi_data = d;
+          jsrt_midi_out(d);
+          return;
+        case 65:  // R65: FSK Control
+        case 66:  // R66: Click Counter Control
+        case 67:  // R67: Click Counter
+        case 84:  // R84: General Timer Value L
+        case 85:  // R85: General Timer Value H
+        case 86:  // R86: MIDI Clock Timer Value L
+        case 87:  // R87: MIDI Clock Timer Value H
+        case 94:  // R94: External I/O direction
+          return;
+        default:
+          printf("INFO: WR R%02d <= $%02x\n", r, d);
+          return;
+      }
+    }
+
     // ZMUSIC virtual work area to realize remote PLAY_CNV_DATA.
     if (0x100000 <= adr && adr < 0x200000) {
       mem = &zmusic_work[adr - 0x100000];

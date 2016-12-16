@@ -11,6 +11,8 @@ char* zmusic_work = NULL;
 
 }
 
+#define CYCLE_LIMIT 1000000
+
 #include "x68sound.h"
 
 #include <fcntl.h>
@@ -29,6 +31,24 @@ struct {
   UChar val;
 } preset[1024];
 int presets = 0;
+
+void run_with_limit(int limit) {
+  OPBuf_clear();
+  EXEC_INSTRUCTION_INFO info;
+  int cycles = 0;
+  while (pc && (cycles < limit)) {
+    info.pc = pc;
+    info.code = *((unsigned short*)(prog_ptr + pc));
+    if (FALSE != prog_exec())
+      return;
+    OPBuf_insert(&info);
+    cycles++;
+  }
+  if (cycles == limit) {
+    printf("VM68 is unexpectedly still running after %d cycles\n", limit);
+    err68a("abort", __FILE__, __LINE__);
+  }
+}
 
 // TODO: Wire X68Sound_OpmPeek
 void zmusic_timerb() {
@@ -185,6 +205,10 @@ extern "C" int pcm8_call() {
     case 0x001:  // Normal play at ch.1
     case 0x002:  // Normal play at ch.2
     case 0x003:  // Normal play at ch.3
+    case 0x004:  // Normal play at ch.4
+    case 0x005:  // Normal play at ch.5
+    case 0x006:  // Normal play at ch.6
+    case 0x007:  // Normal play at ch.7
       X68Sound_Pcm8_Out(rd[0] % 0xffff, &prog_ptr[ra[1]], rd[1], rd[2]);
       break;
     case 0x100:  // Stop

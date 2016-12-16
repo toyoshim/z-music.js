@@ -29,6 +29,80 @@ var bPrint = function(s) {
   bPrintBuffer = lines[lines.length - 1];
 };
 
+var midiAccess = null;
+var midiData = [];
+var midiRunningStatus = 0;
+var midiLengthTable = [
+// 8x 9x ax bx cx dx ex fx
+    3, 3, 3, 3, 2, 2, 3, 0  // ex should be 3
+];
+var midiFxLengthTable = [
+// f0 f1 f2 f3 f4 f5 f6 f7 f8 f9 fa fb fc fd fe ff
+    0, 2, 3, 2, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 1
+];
+
+var midiSend = function(data) {
+  for (var pair of midiAccess.outputs) {
+    var port = pair[1];
+    port.send(data);
+  }
+};
+
+var midiOut = function(d) {
+  if (!midiAccess)
+    return;
+  // Parse MIDI sequence.
+  if (midiData.length == 0) {
+    if ((d & 0x80) == 0) {
+      // Running status.
+      midiData.push(midiRunningStatus);
+    }
+    midiData.push(d);
+  } else {
+    if ((d & 0x80) != 0) {
+      if ((midiData[0] & 0xf0) == 0xe0) {
+        // Workaround for Z-MUSIC Pitch bend bug.
+        d &= 0x7f;
+      } else if (d >= 0xf8) {
+        // Realtime message.
+        midiSend([d]);
+        return;
+      } else if (d == 0xf7 && midiData[0] == 0xf0) {
+        // Permits SysEx => EndOfEx
+      } else {
+        console.warn('Invalid MIDI sequence: $' + d.toString(16) + ' follows' +
+            ' $' + midiData[0].toString(16) + ' (length = ' + midiData.length +
+            ') ; reset');
+        midiData = [];
+      }
+    }
+    midiData.push(d);
+  }
+  var status = midiData[0];
+  var length = 0;
+  if (status == 0xf0) {  // SysEx
+    if (midiData[midiData.length - 1] == 0xf7) {
+      midiSend(midiData);
+      midiData = [];
+    }
+  } else if (status > 0xf0) {  // System messages
+    length = midiFxLengthTable[status & 0x0f];
+    console.assert(length != 0, 'ERROR: midiFxLengthTable returns 0');
+    if (midiData.length == length) {
+      midiSend(midiData);
+      midiData = [];
+    }
+  } else {
+    length = midiLengthTable[(status >> 4) - 8];
+    console.assert(length != 0, 'ERROR: midiLengthTable returns 0');
+    if (midiData.length == length) {
+      midiRunningStatus = status;
+      midiSend(midiData);
+      midiData = [];
+    }
+  }
+};
+
 var audioContext = null;
 var audioBufferSize = 2048;
 var scriptProcessor = null;
@@ -102,6 +176,9 @@ window.ZMUSIC = {
       var opt = options || {};
       zmusicPlaying = opt.autostart || true;
       audioBufferSize = opt.buffer || 2048;
+      // TODO: Check sysex availability.
+      if (opt.midi !== false && navigator.requestMIDIAccess)
+        navigator.requestMIDIAccess({ sysex: true }).then(a => midiAccess = a);
       if (args)
         Module.arguments = args;
       state = window.ZMUSIC.STARTING;

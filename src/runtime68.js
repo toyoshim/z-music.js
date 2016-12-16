@@ -9,6 +9,9 @@ mergeInto(LibraryManager.library, {
   jsrt_iocs_b_print: function(s) {
     bPrint(Module.Pointer_stringify(s));
   },
+  jsrt_midi_out: function(data) {
+    midiOut(data);
+  },
   magic2_call: function(cmd_adr) {
     console.error("magic2_call: should not be called.");
     return -1;

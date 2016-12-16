@@ -109,14 +109,13 @@ int dos_call(UChar code) {
       UShort md = mem_get(ra[7] + 8, S_WORD);
       ULong d_adr = mem_get(ra[7] + 4, S_LONG);
       ULong s_adr = mem_get(ra[7], S_LONG);
-      // Note: $eafaxx: MIDI board.
       fprintf(stderr,
           "$%06x FUNC(BUS_ERR); md=$%04x, d_adr=$%08x, s_adr=$%08x.\n",
           pc - 2, md, d_adr, s_adr);
-      if (s_adr == 0x00eafa05)
-        rd[0] = 2;  // Bus error on read: MIDI board does not exit.
+      if (s_adr == 0x00eafa05)  // Note: MIDI board.
+        rd[0] = 0;  // No errors, MIDI board being there.
       else
-        rd[0] = 0;  // No error on read.
+        rd[0] = 0;  // No errors even for others.
       break;
     }
     default:
