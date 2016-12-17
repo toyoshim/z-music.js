@@ -106,6 +106,7 @@ var midiOut = function(d) {
 var audioContext = null;
 var audioBufferSize = 2048;
 var scriptProcessor = null;
+var bufferSource = null;
 var zmusicResolver = null;
 var zmusicBuffer = 0;
 var zmusicPlaying = false;
@@ -133,7 +134,13 @@ var zmusicReady = function (code) {
   }, false);
   window.ZMUSIC.state =
       zmusicPlaying ? window.ZMUSIC.ACTIVE : window.ZMUSIC.WAITING;
-  // TODO: Puts iOS workaround here.
+  if (!window.AudioContext) {
+    // Safari still privides old API.
+    bufferSource = audioContext.createBufferSource();
+    bufferSource.connect(scriptProcessor);
+    if (zmusicPlaying)
+      bufferSource.noteOn(0);
+  }
   zmusicPlaying = false;
   zmusicResolver.resolve();
 };
@@ -174,27 +181,23 @@ window.ZMUSIC = {
   install: function (args, options) {
     return new Promise(function(resolve, reject) {
       var opt = options || {};
-      zmusicPlaying = opt.autostart || true;
+      var isMobileSafari = navigator.userAgent.indexOf('iPhone') >= 0;
+      zmusicPlaying = opt.autostart || !isMobileSafari;
       audioBufferSize = opt.buffer || 2048;
-      // TODO: Check sysex availability.
-      if (opt.midi !== false && navigator.requestMIDIAccess)
-        navigator.requestMIDIAccess({ sysex: true }).then(a => midiAccess = a);
+      if (opt.midi !== false && navigator.requestMIDIAccess) {
+        navigator.permissions.query({ name: "midi", sysex: true }).then(p => {
+          var sysex = p.state != "denied";
+          navigator.requestMIDIAccess({ sysex: sysex }).then(a => {
+            midiAccess = a;
+          });
+        });
+      }
       if (args)
         Module.arguments = args;
       state = window.ZMUSIC.STARTING;
       zmusicResolver = { resolve: resolve, reject: reject };
       Module.removeRunDependency("initialize");
     });
-  },
-
-  /**
-   * Starts audio loop.
-   */
-  start: function () {
-    if (window.ZMUSIC.state != window.ZMUSIC.WAITING)
-      return;
-    window.ZMUSIC.state = window.ZMUSIC.ACTIVE;
-    // TODO: Puts iOS workaround here.
   },
 
   /**
@@ -206,6 +209,8 @@ window.ZMUSIC = {
   play: function (zmd, zpd) {
     if (zmusicPlaying)
       window.ZMUSIC.stop();
+    if (window.ZMUSIC.state == window.ZMUSIC.WAITING && !window.AudioContext)
+      bufferSource.noteOn(0);
     window.ZMUSIC.state = window.ZMUSIC.PLAYING;
 
     if (zpd) {
@@ -241,11 +246,18 @@ window.ZMUSIC = {
    * @param {ArrayBuffer} data to write
    */
   compileAndPlay: function (data) {
+    if (zmusicPlaying)
+      window.ZMUSIC.stop();
+    if (window.ZMUSIC.state == window.ZMUSIC.WAITING && !window.AudioContext)
+      bufferSource.noteOn(0);
+    window.ZMUSIC.state = window.ZMUSIC.PLAYING;
+
     var d8 = new Uint8Array(data);
     for (var i = 0; i < data.byteLength; ++i)
       Module.HEAPU8[zmusicBuffer + 0x100000 - data.byteLength + i] = d8[i];
     Module._zmusic_copy(data.byteLength);
     Module._zmusic_trap(0x08, 0, 0, 0, 0, null);
+    zmusicPlaying = true;
   },
 
   /**
