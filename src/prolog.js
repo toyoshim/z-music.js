@@ -109,13 +109,17 @@ var scriptProcessor = null;
 var bufferSource = null;
 var zmusicResolver = null;
 var zmusicBuffer = 0;
+var zmusicBufferStart = 0x100000;
+var zmusicBufferSize = 0x100000;
+var zmusicBufferEnd = zmusicBufferStart + zmusicBufferSize - 1;
 var zmusicPlaying = false;
 var zmusicReady = function (code) {
   if (code != 0) {
     zmusicResolver.reject(code);
     return;
   }
-  audioContext = new (window.AudioContext || webkitAudioContext);
+  if (!audioContext)
+    audioContext = new (window.AudioContext || webkitAudioContext);
   zmusicBuffer = Module._zmusic_init(audioContext.sampleRate, audioBufferSize);
   scriptProcessor = audioContext.createScriptProcessor(audioBufferSize, 2, 2);
   scriptProcessor.connect(audioContext.destination);
@@ -132,8 +136,7 @@ var zmusicReady = function (code) {
       r[di] = s[si++] / 32768;
     }
   }, false);
-  window.ZMUSIC.state =
-      zmusicPlaying ? window.ZMUSIC.ACTIVE : window.ZMUSIC.WAITING;
+  ZMUSIC.state = zmusicPlaying ? ZMUSIC.ACTIVE : ZMUSIC.WAITING;
   if (!window.AudioContext) {
     // Safari still privides old API.
     bufferSource = audioContext.createBufferSource();
@@ -158,7 +161,7 @@ var Module = {
   }
 };
 
-window.ZMUSIC = {
+ZMUSIC = {
   INACTIVE: "inactive",  // not initialized yet
   STARTING: "starting",  // install() is called, and initialing
   WAITING: "waiting",    // started but autostart was false
@@ -167,7 +170,7 @@ window.ZMUSIC = {
   PLAYING: "playing",    // started and play() is called
 
   state: "inactive",
-  version: "0.9.1",
+  version: "1.0.0.0",
 
   /**
    * Initializes Z-MUSIC system to accept other requests.
@@ -175,6 +178,7 @@ window.ZMUSIC = {
    * @param {Object} options {
    *     autostart: {boolean} start audio playback immediately (default: true)
    *     buffer: {number} audio playback buffer size in bytes (default: 2048)
+   *     context: {AudioContext} AudioContext instance (default: create new)
    * }
    * @return {Promise}
    */
@@ -184,6 +188,7 @@ window.ZMUSIC = {
       var isMobileSafari = navigator.userAgent.indexOf('iPhone') >= 0;
       zmusicPlaying = opt.autostart || !isMobileSafari;
       audioBufferSize = opt.buffer || 2048;
+      audioContext = opt.context;
       if (opt.midi !== false && navigator.requestMIDIAccess) {
         navigator.permissions.query({ name: "midi", sysex: true }).then(p => {
           var sysex = p.state != "denied";
@@ -194,7 +199,7 @@ window.ZMUSIC = {
       }
       if (args)
         Module.arguments = args;
-      state = window.ZMUSIC.STARTING;
+      state = ZMUSIC.STARTING;
       zmusicResolver = { resolve: resolve, reject: reject };
       Module.removeRunDependency("initialize");
     });
@@ -208,23 +213,19 @@ window.ZMUSIC = {
    */
   play: function (zmd, zpd) {
     if (zmusicPlaying)
-      window.ZMUSIC.stop();
-    if (window.ZMUSIC.state == window.ZMUSIC.WAITING && !window.AudioContext)
+      ZMUSIC.stop();
+    if (ZMUSIC.state == ZMUSIC.WAITING && !window.AudioContext)
       bufferSource.noteOn(0);
-    window.ZMUSIC.state = window.ZMUSIC.PLAYING;
+    ZMUSIC.state = ZMUSIC.PLAYING;
 
     if (zpd) {
-      var p8 = new Uint8Array(zpd);
-      for (var i = 0; i < zpd.byteLength; ++i)
-        Module.HEAPU8[zmusicBuffer + i] = p8[i];
-      Module._zmusic_trap(0x46, 0, 0, 0, 0x100008, null);
+      ZMUSIC.trap(0x46, 0, 0, 0,
+          zmusicBufferStart + zmusicBufferSize / 2, zpd, 8, zpd.byteLength - 8);
     }
 
     if (zmd) {
-      var m8 = new Uint8Array(zmd);
-      for (var i = 0; i < zmd.byteLength; ++i)
-        Module.HEAPU8[zmusicBuffer + 0x080000 + i] = m8[i];
-      Module._zmusic_trap(0x11, 0, 0, 0, 0x180007, null);
+      ZMUSIC.trap(0x11, 0, 0, 0,
+          zmusicBufferStart + 1, zmd, 7, zmd.byteLength - 7);
     }
     zmusicPlaying = true;
   },
@@ -235,9 +236,9 @@ window.ZMUSIC = {
   stop: function () {
     if (!zmusicPlaying)
       return;
-    window.ZMUSIC.state = window.ZMUSIC.ACTIVE;
+    ZMUSIC.state = ZMUSIC.ACTIVE;
 
-    Module._zmusic_trap(0x0a, 0, 0, 0, 0, null);
+    ZMUSIC.trap(0x0a, 0, 0, 0, 0, null);
     zmusicPlaying = false;
   },
 
@@ -247,17 +248,27 @@ window.ZMUSIC = {
    */
   compileAndPlay: function (data) {
     if (zmusicPlaying)
-      window.ZMUSIC.stop();
-    if (window.ZMUSIC.state == window.ZMUSIC.WAITING && !window.AudioContext)
+      ZMUSIC.stop();
+    if (ZMUSIC.state == ZMUSIC.WAITING && !window.AudioContext)
       bufferSource.noteOn(0);
-    window.ZMUSIC.state = window.ZMUSIC.PLAYING;
+    ZMUSIC.state = ZMUSIC.PLAYING;
 
     var d8 = new Uint8Array(data);
     for (var i = 0; i < data.byteLength; ++i)
-      Module.HEAPU8[zmusicBuffer + 0x100000 - data.byteLength + i] = d8[i];
+      Module.HEAPU8[zmusicBuffer + i] = d8[i];
     Module._zmusic_copy(data.byteLength);
-    Module._zmusic_trap(0x08, 0, 0, 0, 0, null);
+
+    ZMUSIC.trap(0x08, 0, 0, 0, 0, null);
     zmusicPlaying = true;
+  },
+
+  /**
+   * Connects audio output node to |node| instead of default destination.
+   * @param {AudioNode} node AudioNode to connect for outputs
+   */
+  connect: function (node) {
+    scriptProcessor.disconnect();
+    scriptProcessor.connect(node);
   },
 
   /**
@@ -268,31 +279,21 @@ window.ZMUSIC = {
    * @param d4 {number} d4 register value
    * @param a1 {number} a1 register value, could be [0x100000:0x1FFFFF]
    * @param data {ArrayBuffer} data that should be stored at a1 address
+   * @param offset {number} offset of data (default: 0)
+   * @param length {number} length of data from offset (default: data.length)
    */
-  _trap3: function (d1, d2, d3, d4, a1, data) {
-    if (a1 && data) {
+  trap: function (d1, d2, d3, d4, a1, data, offset, length) {
+    if (a1 && zmusicBufferStart <= a1 && a1 <= zmusicBufferEnd && data) {
+      if (!offset)
+        offset= 0;
+      if (!length)
+        length = data.byteLength;
       var d8 = new Uint8Array(data);
-      for (var i = 0; i < data.byteLength; ++i)
-      Module.HEAPU8[zmusicBuffer + a1 - 0x100000 + i] = d8[i];
+      for (var i = 0; i <length; ++i) {
+        Module.HEAPU8[zmusicBuffer + a1 - zmusicBufferStart + i] =
+            d8[offset + i];
+      }
     }
     return Module._zmusic_trap(d1, d2, d3, d4, a1, null);
-  },
-
-  /**
-   * Peeks X68000 memory by long word.
-   * @param addr {number} address
-   * @return {number} data
-   */
-  _peek: function (addr) {
-    return Module._mem_get(addr, 2) & 0xffffffff;
-  },
-
-  /**
-   * Pokes X68000 memory by long word.
-   * @param addr {number} address
-   * @param data {number} data
-   */
-  _poke: function (addr) {
-    Module._mem_set(addr, data, 2);
   }
 };

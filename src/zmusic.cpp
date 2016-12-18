@@ -144,10 +144,11 @@ extern "C" void zmusic_copy(ULong size) {
   ULong interrupt = mem_get(zmusic_driver + 10, S_LONG);
 
   // Setup the request.
-  ra[5] = 0x200000 - size - 22;
+  ULong a5 = (0x100000 + size + 1) & ~1;
+  ra[5] = a5;
   mem_set(ra[5] + 0, 26, S_BYTE);
   mem_set(ra[5] + 2, 8, S_BYTE);
-  mem_set(ra[5] + 14, ra[5] + 22, S_LONG);
+  mem_set(ra[5] + 14, 0x100000, S_LONG);
   mem_set(ra[5] + 18, size, S_LONG);
 
   // Stores a request of A5 by calling strategy entry.
@@ -166,15 +167,15 @@ extern "C" void zmusic_copy(ULong size) {
   SR_S_ON();
   while (pc && FALSE == prog_exec());
 
-  UChar errorLow = zmusic_work[0x100000 - size - 22 + 3];
-  UChar errorHigh = zmusic_work[0x100000 - size - 22 + 4];
+  UChar errorLow = zmusic_work[a5 + 3];
+  UChar errorHigh = zmusic_work[a5 + 4];
   if (errorLow != 0 || errorHigh != 0) {
     printf("COPY to OPM ERROR: $%02x%02x\n", errorHigh, errorLow);
     return;
   }
 
   // Send EOF. 
-  ra[5] = 0x200000 - 22;
+  ra[5] = a5;
   mem_set(ra[5] + 0, 26, S_BYTE);
   mem_set(ra[5] + 2, 8, S_BYTE);
   mem_set(ra[5] + 14, 0, S_LONG);
@@ -193,8 +194,8 @@ extern "C" void zmusic_copy(ULong size) {
   SR_S_ON();
   while (pc && FALSE == prog_exec());
   
-  errorLow = zmusic_work[0x100000 - size - 22 + 3];
-  errorHigh = zmusic_work[0x100000 - size - 22 + 4];
+  errorLow = zmusic_work[a5 + 3];
+  errorHigh = zmusic_work[a5 + 4];
   if (errorLow != 0 || errorHigh != 0)
     printf("COPY to OPM ERROR: $%02x%02x\n", errorHigh, errorLow);
 }
