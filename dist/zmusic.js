@@ -82,7 +82,8 @@ var midiOut = function(d) {
   var length = 0;
   if (status == 0xf0) {  // SysEx
     if (midiData[midiData.length - 1] == 0xf7) {
-      midiSend(midiData);
+      if (midiAccess.sysexEnabled)
+        midiSend(midiData);
       midiData = [];
     }
   } else if (status > 0xf0) {  // System messages
@@ -170,7 +171,7 @@ ZMUSIC = {
   PLAYING: "playing",    // started and play() is called
 
   state: "inactive",
-  version: "1.1.0.0",
+  version: "1.1.1.0",
 
   /**
    * Initializes Z-MUSIC system to accept other requests.
