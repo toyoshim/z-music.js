@@ -5,7 +5,7 @@
 
 var bPrintBuffer = '';
 var bRe = /\x1b\[(m|(\d\d\x6d))/g;
-var bEscape = function(s) {
+var bEscape = function (s) {
   var code = [];
   s = s.replace(/\ubb9b[^{\udedb]+\udedb\x33\x33\x6d/,
       'Z-mu$iC version 1.10');
@@ -18,7 +18,7 @@ var bEscape = function(s) {
   return rs;
 };
 
-var bPrint = function(s) {
+var bPrint = function (s) {
   bPrintBuffer += s;
   var lines = bPrintBuffer.split('\n');
   for (var i = 0; i < lines.length - 1; ++i) {
@@ -41,14 +41,14 @@ var midiFxLengthTable = [
     0, 2, 3, 2, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 1
 ];
 
-var midiSend = function(data) {
+var midiSend = function (data) {
   for (var pair of midiAccess.outputs) {
     var port = pair[1];
     port.send(data);
   }
 };
 
-var midiOut = function(d) {
+var midiOut = function (d) {
   if (!midiAccess)
     return;
   // Parse MIDI sequence.
@@ -113,7 +113,27 @@ var zmusicBuffer = 0;
 var zmusicBufferStart = 0x100000;
 var zmusicBufferSize = 0x100000;
 var zmusicBufferEnd = zmusicBufferStart + zmusicBufferSize - 1;
+var zmusicPrerenderBuffer = [
+    new Float32Array(audioBufferSize), new Float32Array(audioBufferSize)];
+var zmusicPrerenderBufferReady = false;
 var zmusicPlaying = false;
+var zmusicPrerender = function () {
+  if (zmusicPrerenderBufferReady)
+    return;
+
+  var work = Module._zmusic_update();
+  var si = work >> 1;
+  var s = Module.HEAP16;
+  var l = zmusicPrerenderBuffer[0];
+  var r = zmusicPrerenderBuffer[1];
+  for (var di = 0; di < audioBufferSize; ++di) {
+    l[di] = s[si++] / 32768;
+    r[di] = s[si++] / 32768;
+  }
+
+  zmusicPrerenderBufferReady = true;
+};
+
 var zmusicReady = function (code) {
   if (code != 0) {
     zmusicResolver.reject(code);
@@ -127,15 +147,20 @@ var zmusicReady = function (code) {
   scriptProcessor.addEventListener('audioprocess', function (e) {
     if (!zmusicPlaying)
       return;
-    var work = Module._zmusic_update();
-    var si = work >> 1;
-    var s = Module.HEAP16;
-    var l = e.outputBuffer.getChannelData(0);
-    var r = e.outputBuffer.getChannelData(1);
-    for (var di = 0; di < audioBufferSize; ++di) {
-      l[di] = s[si++] / 32768;
-      r[di] = s[si++] / 32768;
+    if (!zmusicPrerenderBufferReady)
+      zmusicPrerender();
+
+    var sl = zmusicPrerenderBuffer[0];
+    var sr = zmusicPrerenderBuffer[1];
+    var dl = e.outputBuffer.getChannelData(0);
+    var dr = e.outputBuffer.getChannelData(1);
+    for (var i = 0; i < audioBufferSize; ++i) {
+      dl[i] = sl[i];
+      dr[i] = sr[i];
     }
+
+    zmusicPrerenderBufferReady = false;
+    setTimeout(zmusicPrerender, 0);
   }, false);
   ZMUSIC.state = zmusicPlaying ? ZMUSIC.ACTIVE : ZMUSIC.WAITING;
   if (!window.AudioContext) {
@@ -157,7 +182,7 @@ var Module = {
     '-P0',    // Allocate 0kB for ADPCM data buffer.
     '-W100',  // Allocate 100kB for work area.
   ],
-  preInit: function() {
+  preInit: function () {
     Module.addRunDependency("initialize");
   }
 };
@@ -171,7 +196,7 @@ ZMUSIC = {
   PLAYING: "playing",    // started and play() is called
 
   state: "inactive",
-  version: "1.1.1.0",
+  version: "1.1.2.0",
 
   /**
    * Initializes Z-MUSIC system to accept other requests.
@@ -184,7 +209,7 @@ ZMUSIC = {
    * @return {Promise}
    */
   install: function (args, options) {
-    return new Promise(function(resolve, reject) {
+    return new Promise(function (resolve, reject) {
       var opt = options || {};
       var isMobileSafari = navigator.userAgent.indexOf('iPhone') >= 0;
       zmusicPlaying = opt.autostart || !isMobileSafari;
