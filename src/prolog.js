@@ -165,12 +165,12 @@ ZMUSIC = {
   INACTIVE: "inactive",  // not initialized yet
   STARTING: "starting",  // install() is called, and initialing
   WAITING: "waiting",    // started but autostart was false
-  ACTIVE: "active",      // started and autostart was true or start() is called,
+  ACTIVE: "active",      // started and autostart was true or play() is called,
                          // or stop() is called after plating
   PLAYING: "playing",    // started and play() is called
 
   state: "inactive",
-  version: "1.0.0.0",
+  version: "1.1.0.0",
 
   /**
    * Initializes Z-MUSIC system to accept other requests.
@@ -267,8 +267,15 @@ ZMUSIC = {
    * @param {AudioNode} node AudioNode to connect for outputs
    */
   connect: function (node) {
-    scriptProcessor.disconnect();
     scriptProcessor.connect(node);
+  },
+
+  /**
+   * Disconnects audio output node.
+   * @param {AudioNode} node AudioNode to disconnect if specified (optional)
+   */
+  disconnect: function (node) {
+    scriptProcessor.disconnect(node);
   },
 
   /**
