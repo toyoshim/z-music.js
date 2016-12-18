@@ -13,7 +13,7 @@ Z-MUSIC v1.10 and v2.08 for the web
 ```
 <html>
 <head>
-<script src="zmusic.js"></script>
+<script src="dist/zmusic.js"></script>
 <script>
 // Make XHR to support Promise.
 function xhr (url) {
@@ -42,12 +42,12 @@ Promise.all([
 
 ## Initialize with detailed parameters
 
-### Use ZMUSIC v1.10
+### Use Z-MUSIC v1.10
 ```
 ZMUSIC.install(['ZMUSIC110.X']);
 ```
 
-### Use ZMUSIC v2.08 (default)
+### Use Z-MUSIC v2.08 (default)
 ```
 ZMUSIC.install(['ZMUSIC208.X']);
 ```
@@ -61,6 +61,26 @@ ZMUSIC.install(['ZMUSIC110.X', '-n', '-u', -'t0', '-w0']);
 ```
 ZMUSIC.install(null, { buffer: 8192 });
 ```
+
+### Redirect output to another AudioNode
+```
+ZMUSIC.install(null, { context: myAudioContext });
+ZMUSIC.connect(myAudioNodeCreatedFromMyAudioContext);
+```
+
+### Compile ZMS and play
+```
+Promise.all([
+    ZMUSIC.install(),
+    xhr('data/bgm1.zms')]).then(results => {
+  ZMUSIC.compileAndPlay(results[1]);
+});
+```
+
+### mobile Safari specific notice
+Since mobile Safari does not allow us to playback any audio without user
+actions, you need to call the first play() or compileAndPlay() call inside the
+event handler for user actions.
 
 ### ZMUSIC.js API
 See src/prolog.js
