@@ -11,7 +11,7 @@ char* zmusic_work = NULL;
 
 }
 
-//#define fprintf(...)
+#define fprintf(...)
 #define CYCLE_LIMIT 1000000
 #define RESULT_ERROR -1
 #define RESULT_ASYNC -2

@@ -31,24 +31,35 @@ var bPrint = function (s) {
 
 var fdBase = 1024;
 var files = [];
+var fileOpenCallback = null;
+
+var fileSet = function (data) {
+  var fd;
+  for (fd = 0; fd < files.length; ++fd) {
+    if (!files[fd].opened)
+      break;
+  }
+  if (files.length == fd)
+    files.push({ offset: 0, buffer: null, opened: false });
+  files[fd].offset = 0;
+  files[fd].buffer = new Uint8Array(data);
+  files[fd].opened = true;
+  return fd + fdBase;
+}
+
 var fileOpen = function (filename) {
+  if (fileOpenCallback) {
+    fileOpenCallback(filename).then(data => Module._async_done(fileSet(data)));
+    return;
+  }
+
   var xhr = new XMLHttpRequest();
   xhr.open('GET', filename, true);
   xhr.responseType = 'arraybuffer';
   xhr.addEventListener('load', e => {
     var result = -1;
-    if (xhr.status == 200) {
-      for (fd = 0; fd < files.length; ++fd) {
-        if (!files[fd].opened)
-          break;
-      }
-      if (files.length == fd)
-        files.push({ offset: 0, buffer: null, opened: false });
-      files[fd].offset = 0;
-      files[fd].buffer = new Uint8Array(xhr.response);
-      files[fd].opened = true;
-      result = fd + fdBase;
-    }
+    if (xhr.status == 200)
+      result = fileSet(xhr.response);
     xhr.abort();
     Module._async_done(result);
   }, false);
@@ -255,7 +266,7 @@ var Module = {
   arguments: [
     'ZMUSIC208.X',
     '-T100',  // Allocate 100kB for track buffer.
-    '-P0',    // Allocate 0kB for ADPCM data buffer.
+    '-P400',  // Allocate 400kB for ADPCM data buffer.
     '-W100',  // Allocate 100kB for work area.
   ],
   preInit: function () {
@@ -272,7 +283,7 @@ ZMUSIC = {
   PLAYING: "playing",    // started and play() is called
 
   state: "inactive",
-  version: "1.2.0.0",
+  version: "1.2.1.0",
 
   /**
    * Initializes Z-MUSIC system to accept other requests.
@@ -325,27 +336,38 @@ ZMUSIC = {
         bufferSource.noteOn(0);
       ZMUSIC.state = ZMUSIC.PLAYING;
 
+      var zpdPromise = null;
       if (zpd) {
-        ZMUSIC.trap(0x46, 0, 0, 0,
-            zmusicBufferStart + zmusicBufferSize / 2, zpd, 8, zpd.byteLength - 8);
+        zpdPromise = new Promise(function (success, error) {
+          fileOpenCallback = function (filename) {
+            return new Promise(function (success, error) { success(zpd); });
+          }
+          resolver = () => success();
+          var name = new Uint8Array([0x40, 0x00]).buffer;
+          ZMUSIC.trap(0x39, 0, 0, 0, zmusicBufferEnd - 2, name, 0, 2);
+        });
+      } else {
+        zpdPromise = new Promise(function (success, error) { success(); });
       }
 
-      if (zmd) {
-        resolver = function (code) {
-          if (code) {
-            error(code);
-          } else {
-            zmusicPlaying = true;
-            success(0);
-          }
-        };
-        var result = ZMUSIC.trap(0x11, 0, 0, 0, zmusicBufferStart + 1, zmd, 7,
-            zmd.byteLength - 7);
-        if (result != -2)
-          resolve(result);
-      } else {
-        success(0);
-      }
+      zpdPromise.then(() => {
+        if (zmd) {
+          resolver = function (code) {
+            if (code) {
+              error(code);
+            } else {
+              zmusicPlaying = true;
+              success(0);
+            }
+          };
+          var result = ZMUSIC.trap(0x11, 0, 0, 0, zmusicBufferStart + 1, zmd, 7,
+              zmd.byteLength - 7);
+          if (result != -2)
+            resolve(result);
+        } else {
+          success(0);
+        }
+      });
     });
   },
 
@@ -429,7 +451,7 @@ ZMUSIC = {
       if (!length)
         length = data.byteLength;
       var d8 = new Uint8Array(data);
-      for (var i = 0; i <length; ++i) {
+      for (var i = 0; i < length; ++i) {
         Module.HEAPU8[zmusicBuffer + a1 - zmusicBufferStart + i] =
             d8[offset + i];
       }
