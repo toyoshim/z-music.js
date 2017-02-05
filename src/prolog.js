@@ -29,6 +29,82 @@ var bPrint = function (s) {
   bPrintBuffer = lines[lines.length - 1];
 };
 
+var fdBase = 1024;
+var files = [];
+var fileOpen = function (filename) {
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', filename, true);
+  xhr.responseType = 'arraybuffer';
+  xhr.addEventListener('load', e => {
+    var result = -1;
+    if (xhr.status == 200) {
+      for (fd = 0; fd < files.length; ++fd) {
+        if (!files[fd].opened)
+          break;
+      }
+      if (files.length == fd)
+        files.push({ offset: 0, buffer: null, opened: false });
+      files[fd].offset = 0;
+      files[fd].buffer = new Uint8Array(xhr.response);
+      files[fd].opened = true;
+      result = fd + fdBase;
+    }
+    xhr.abort();
+    Module._async_done(result);
+  }, false);
+  xhr.send();
+};
+
+var fileSeek = function (fileno, offset, mode) {
+  var fd = fileno - fdBase;
+  if (fd < 0 || !files[fd] || !files[fd].opened)
+    return -1;
+  if (0 == mode)
+    files[fd].offset = offset;
+  else if (1 == mode)
+    files[fd].offset += offset;
+  else if (2 == mode)
+    files[fd].offset = files[fd].buffer.byteLength + offset;
+  else
+    return -1;
+  return files[fd].offset;
+};
+
+var fileRead = function (fileno, bufferAdr, len) {
+  var fd = fileno - fdBase;
+  if (fd < 0 || !files[fd] || !files[fd].opened)
+    return -1;
+  for (var i = 0; i < len; ++i) {
+    Module.HEAPU8[bufferAdr + i] = files[fd].buffer[files[fd].offset];
+    if (files[fd].offset + 1 == files[fd].buffer.byteLength)
+      return i + 1;
+    files[fd].offset++;
+  }
+  return len;
+};
+
+var fileClose = function (fileno) {
+  var fd = fileno - fdBase;
+  if (fd < 0 || !files[fd] || !files[fd].opened)
+    return -1;
+  files[fd].offset = 0;
+  files[fd].buffer = null;
+  files[fd].opened = false;
+  return 0;
+};
+
+var resolver = null;
+var resolve = function (result) {
+  if (!resolver) {
+    console.error('resolve was called, but there is no pending Promise. (code: '
+        + result + ')');
+    return;
+  }
+  var resolve = resolver;
+  resolver = null;
+  resolve(result);
+}
+
 var midiAccess = null;
 var midiData = [];
 var midiRunningStatus = 0;
@@ -196,7 +272,7 @@ ZMUSIC = {
   PLAYING: "playing",    // started and play() is called
 
   state: "inactive",
-  version: "1.1.2.0",
+  version: "1.2.0.0",
 
   /**
    * Initializes Z-MUSIC system to accept other requests.
@@ -236,24 +312,41 @@ ZMUSIC = {
    * reused.
    * @param {ArrayBuffer} zmd ZMD data
    * @param {ArrayBuffer} zpd ZPD data (optional)
+   * @return {Promise<number>} promise
    */
   play: function (zmd, zpd) {
-    if (zmusicPlaying)
-      ZMUSIC.stop();
-    if (ZMUSIC.state == ZMUSIC.WAITING && !window.AudioContext)
-      bufferSource.noteOn(0);
-    ZMUSIC.state = ZMUSIC.PLAYING;
+    if (resolver)
+      return null;
 
-    if (zpd) {
-      ZMUSIC.trap(0x46, 0, 0, 0,
-          zmusicBufferStart + zmusicBufferSize / 2, zpd, 8, zpd.byteLength - 8);
-    }
+    return new Promise(function (success, error) {
+      if (zmusicPlaying)
+        ZMUSIC.stop();
+      if (ZMUSIC.state == ZMUSIC.WAITING && !window.AudioContext)
+        bufferSource.noteOn(0);
+      ZMUSIC.state = ZMUSIC.PLAYING;
 
-    if (zmd) {
-      ZMUSIC.trap(0x11, 0, 0, 0,
-          zmusicBufferStart + 1, zmd, 7, zmd.byteLength - 7);
-    }
-    zmusicPlaying = true;
+      if (zpd) {
+        ZMUSIC.trap(0x46, 0, 0, 0,
+            zmusicBufferStart + zmusicBufferSize / 2, zpd, 8, zpd.byteLength - 8);
+      }
+
+      if (zmd) {
+        resolver = function (code) {
+          if (code) {
+            error(code);
+          } else {
+            zmusicPlaying = true;
+            success(0);
+          }
+        };
+        var result = ZMUSIC.trap(0x11, 0, 0, 0, zmusicBufferStart + 1, zmd, 7,
+            zmd.byteLength - 7);
+        if (result != -2)
+          resolve(result);
+      } else {
+        success(0);
+      }
+    });
   },
 
   /**
@@ -271,21 +364,35 @@ ZMUSIC = {
   /**
    * Plays ZMS data after compiling it.
    * @param {ArrayBuffer} data to write
+   * @return {Promise<number>} promise
    */
   compileAndPlay: function (data) {
-    if (zmusicPlaying)
-      ZMUSIC.stop();
-    if (ZMUSIC.state == ZMUSIC.WAITING && !window.AudioContext)
-      bufferSource.noteOn(0);
-    ZMUSIC.state = ZMUSIC.PLAYING;
+    if (resolver)
+      return;
 
-    var d8 = new Uint8Array(data);
-    for (var i = 0; i < data.byteLength; ++i)
-      Module.HEAPU8[zmusicBuffer + i] = d8[i];
-    Module._zmusic_copy(data.byteLength);
+    return new Promise(function (success, error) {
+      if (zmusicPlaying)
+        ZMUSIC.stop();
+      if (ZMUSIC.state == ZMUSIC.WAITING && !window.AudioContext)
+        bufferSource.noteOn(0);
+      ZMUSIC.state = ZMUSIC.PLAYING;
 
-    ZMUSIC.trap(0x08, 0, 0, 0, 0, null);
-    zmusicPlaying = true;
+      var d8 = new Uint8Array(data);
+      for (var i = 0; i < data.byteLength; ++i)
+        Module.HEAPU8[zmusicBuffer + i] = d8[i];
+      resolver = code => {
+        if (code == 0) {
+          ZMUSIC.trap(0x08, 0, 0, 0, 0, null);
+          zmusicPlaying = true;
+          success(0);
+        } else {
+          error(code);
+        }
+      };
+      var result = Module._zmusic_copy(data.byteLength);
+      if (result != -2)
+        resolve(result);
+    });
   },
 
   /**
@@ -327,6 +434,8 @@ ZMUSIC = {
             d8[offset + i];
       }
     }
-    return Module._zmusic_trap(d1, d2, d3, d4, a1, null);
+    return Module._zmusic_trap(d1, d2, d3, d4, a1);
   }
 };
+
+/* Unexpected token here should be resolved by epilog.js */

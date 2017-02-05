@@ -77,6 +77,17 @@ Promise.all([
 });
 ```
 
+### .adpcm_block_data
+If .adpcm_block_data command is used in ZMS and ZMD, play() or compileAndPlay()
+call will be asynchronously done. It returns Pomise to notify its completion.
+
+The filename for the ZPD would be converted to a name in capitals. Since this
+is performed inside ZMUSIC.X, I have no plan to fix this problem.
+E.g., FooBar.zpd will be accessed by FOOBAR.ZPD and /FOOBAR.ZPD.
+
+If someone request, I would add an asynchronous interface to handle ZPD file
+reads in a customized way.
+
 ### mobile Safari specific notice
 Since mobile Safari does not allow us to playback any audio without user
 actions, you need to call the first play() or compileAndPlay() call inside the

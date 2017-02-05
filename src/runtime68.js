@@ -6,8 +6,23 @@ mergeInto(LibraryManager.library, {
   jsrt_dos_keepr: function(code) {
     zmusicReady(code);
   },
+  jsrt_dos_open: function(filename_adr) {
+    fileOpen(Module.Pointer_stringify(filename_adr));
+  },
+  jsrt_dos_seek: function(fileno, offset, mode) {
+    return fileSeek(fileno, offset, mode);
+  },
+  jsrt_dos_read: function(fileno, buffer_adr, len) {
+    return fileRead(fileno, buffer_adr, len);
+  },
+  jsrt_dos_close: function(fileno) {
+    return fileClose(fileno);
+  },
   jsrt_iocs_b_print: function(s) {
     bPrint(Module.Pointer_stringify(s));
+  },
+  jsrt_resolve: function(result) {
+    resolve(result);
   },
   jsrt_midi_out: function(data) {
     midiOut(data);
