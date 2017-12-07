@@ -13,7 +13,7 @@ Z-MUSIC v1.10 and v2.08 for the web
 ```
 <html>
 <head>
-<script src="dist/zmusic.js"></script>
+<script src="dist/zmusic.asm.js"></script>
 <script>
 // Make XHR to support Promise.
 function xhr (url) {
@@ -39,6 +39,10 @@ Promise.all([
 </head>
 </html>
 ```
+
+## WebAssembly support
+You can use dist/zmusic.js instead of dist/zmusic.asm.js to use WebAssebly
+version. It requires to host dist/zmusic.wasm too.
 
 ## Initialize with detailed parameters
 

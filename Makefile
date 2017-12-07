@@ -2,7 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-TARGET  = zmusic.js
 OUT	= out
 DEPEND	= $(OUT)/depend
 RUN68	= third_party/run68as/third_party/run68/src
@@ -12,7 +11,8 @@ ZMSC2	= src
 CC	= emcc
 DEFS	= -DFNC_TRACE -DENV_FROM_INI -DEMSCRIPTEN_KEEPR
 INCS	= -include $(MOD68)/preinc.h -I $(RUN68) -I $(OPM) -I $(ZMSC2)/compat
-CFLAGS	= $(DEFS) $(INCS) -Oz
+OFLAGS  = -Oz
+CFLAGS	= $(DEFS) $(INCS) $(OFLAGS)
 CXXFLAGS= $(CFLAGS) -fno-operator-names
 ZMFUNCS	= '_zmusic_init', '_zmusic_update', '_zmusic_trap', '_zmusic_copy'
 RTFUNCS = '_main', '_mem_get', '_mem_set', '_async_done'
@@ -20,7 +20,8 @@ EXPORTS	= -s EXPORTED_FUNCTIONS="[$(RTFUNCS), $(ZMFUNCS)]"
 RUNTIME	= --js-library $(ZMSC2)/runtime68.js
 EMBED	= --embed-file x/ZMUSIC110.X@ZMUSIC110.X \
 	  --embed-file x/ZMUSIC208.X@ZMUSIC208.X
-LDFLAGS	= -lm -Oz $(RUNTIME) $(EXPORTS) --memory-init-file 0 $(EMBED)
+LDFLAGS	= -lm $(OFLAGS) $(RUNTIME) $(EXPORTS) --memory-init-file 0 $(EMBED)
+WFLAGS	= -lm $(OFLAGS) $(RUNTIME) $(EXPORTS) -s WASM=1 $(EMBED)
 CSRCS	= \
 	$(RUN68)/ansicolor-w32.c \
 	$(RUN68)/calc.c \
@@ -75,25 +76,31 @@ $(OUT)/%.o: $(RUN68)/%.c
 	$(CC) $(CFLAGS) -o $@ $<
 
 .PHONY: all clean depend dist
-all: $(DEPEND) $(TARGET)
+all: $(DEPEND) zmusic.js zmusic.asm.js
 
 clean:
-	rm -rf $(OUT) $(TARGET)
+	rm -rf $(OUT) zmusic.js zmusic.asm.js
 
 depend: $(DEPEND)
 
 dist: all
-	cp $(TARGET) dist/
+	cp zmusic.js zmusic.asm.js out/zmusic.wasm dist/
 
 $(DEPEND): $(CSRCS) $(CXXSRCS) Makefile
 	mkdir -p $(OUT)
 	$(CC) $(CFLAGS) -MM $(CSRCS) $(CXXSRCS)> $@
 
-$(TARGET): $(OUT)/zmusic.js $(ZMSC2)/prolog.js $(ZMSC2)/epilog.js
+zmusic.js: $(OUT)/zmusic.js $(ZMSC2)/prolog.js $(ZMSC2)/epilog.js
 	cat $(ZMSC2)/prolog.js $(OUT)/zmusic.js $(ZMSC2)/epilog.js > $@
 
-$(OUT)/zmusic.js: $(OBJS) $(ZMSC2)/runtime68.js
+zmusic.asm.js: $(OUT)/zmusic.asm.js $(ZMSC2)/prolog.js $(ZMSC2)/epilog.js
+	cat $(ZMSC2)/prolog.js $(OUT)/zmusic.asm.js $(ZMSC2)/epilog.js > $@
+
+$(OUT)/zmusic.asm.js: $(OBJS) $(ZMSC2)/runtime68.js
 	$(CC) -o $@ $(LDFLAGS) $(OBJS)
+
+$(OUT)/zmusic.js: $(OBJS) $(ZMSC2)/runtime68.js
+	$(CC) -o $@ $(WFLAGS) $(OBJS)
 
 ifneq "$(MAKECMDGOALS)" "clean"
 -include $(DEPEND)
