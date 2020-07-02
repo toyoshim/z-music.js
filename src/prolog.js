@@ -4,18 +4,20 @@
 (function () {
 
 var bPrintBuffer = '';
-var bRe = /\x1b\[(m|(\d\d\x6d))/g;
 var bEscape = function (s) {
-  var code = [];
-  s = s.replace(/\ubb9b[^{\udedb]+\udedb\x33\x33\x6d/,
-      'Z-mu$iC version 1.10');
-  // db8b, dcee, db83, dcf8, 20
-  s = s.replace(/\udb17[^\udb8b]+\udb8b\udcee\udb83\udcf8/,
-      'Z-mu$iC version 2.08');
-  s = s.replace(/\udff6\udfc1/, '-A');
-  s = s.replace('PCM8.X (C)H.ETOH', 'X68Sound');
-  var rs = s.replace(bRe, '');
-  return rs;
+  // Replace custom characters for "Z-mu$iC"
+  s = s.replace(/\xeb\xee/, 'Z');
+  s = s.replace(/\xeb\xef\xeb\xf0/, 'mu');
+  s = s.replace(/\xeb\xf1/, '$');
+  s = s.replace(/\xeb\xf2\xeb\xf3/, 'iC ');
+
+  // Strip unsupported escape sequences.
+  s = s.replace(/\xf3/g, '');
+  s = s.replace(/\x1b\[m/g, '');
+
+  // Replace X68k specific Japanese characters.
+  s = s.replace(/\xa5/g, '\u2022');
+  return s;
 };
 
 var bPrint = function (s) {

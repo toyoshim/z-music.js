@@ -7,7 +7,7 @@ mergeInto(LibraryManager.library, {
     zmusicReady(code);
   },
   jsrt_dos_open: function(filename_adr) {
-    fileOpen(Module.Pointer_stringify(filename_adr));
+    fileOpen(AsciiToString(filename_adr));
   },
   jsrt_dos_seek: function(fileno, offset, mode) {
     return fileSeek(fileno, offset, mode);
@@ -19,7 +19,7 @@ mergeInto(LibraryManager.library, {
     return fileClose(fileno);
   },
   jsrt_iocs_b_print: function(s) {
-    bPrint(Module.Pointer_stringify(s));
+    bPrint(AsciiToString(s));
   },
   jsrt_resolve: function(result) {
     resolve(result);
