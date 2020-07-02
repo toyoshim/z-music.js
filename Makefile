@@ -20,7 +20,7 @@ EXPORTS	= -s EXPORTED_FUNCTIONS="[$(RTFUNCS), $(ZMFUNCS)]"
 RUNTIME	= --js-library $(ZMSC2)/runtime68.js
 EMBED	= --embed-file x/ZMUSIC110.X@ZMUSIC110.X \
 	  --embed-file x/ZMUSIC208.X@ZMUSIC208.X
-LDFLAGS	= -lm $(OFLAGS) $(RUNTIME) $(EXPORTS) --memory-init-file 0 $(EMBED)
+LDFLAGS	= -lm $(OFLAGS) $(RUNTIME) $(EXPORTS) -s WASM=0 --memory-init-file 0 $(EMBED)
 WFLAGS	= -lm $(OFLAGS) $(RUNTIME) $(EXPORTS) -s WASM=1 $(EMBED)
 CSRCS	= \
 	$(RUN68)/ansicolor-w32.c \
