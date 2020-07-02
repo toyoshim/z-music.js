@@ -273,7 +273,26 @@ var Module = {
   ],
   preInit: function () {
     Module.addRunDependency("initialize");
-  }
+  },
+  // Dirty hacks to replace previously evaluated Module.arguments during
+  // Module.run().
+  onRuntimeInitialized: function () {
+    // Resets |shouldRunNow| as this was already evaluated based on
+    // |noInitialRun|.
+    shouldRunNow = true;
+    // Resets |calledRun| as this was already set in doRun().
+    calledRun = false;
+    // Resets this function so that this should not be called recursively during
+    // the following run().
+    Module.onRuntimeInitialized = null;
+    // Calls run() again, but with the revised arguments.
+    run(Module.arguments);
+    // Restores the original |shouldRunNow| so that doRun() does not call main()
+    // again with the original arguments after this function finishes.
+    // |calledRun| should be already restored during the run() call above.
+    shouldRunNow = false;
+  },
+  noInitialRun: true
 };
 
 ZMUSIC = {
