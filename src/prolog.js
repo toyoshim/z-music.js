@@ -300,7 +300,7 @@ ZMUSIC = {
   PLAYING: "playing",    // started and play() is called
 
   state: "inactive",
-  version: "1.2.1.0",
+  version: "1.3.0.0",
 
   /**
    * Initializes Z-MUSIC system to accept other requests.

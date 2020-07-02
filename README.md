@@ -2,6 +2,7 @@
 Z-MUSIC v1.10 and v2.08 for the web
 
 ## How to build
+emcc should be installed via emsdk (Emscripten) beforehand.
 ```
 % git clone https://github.com/toyoshim/z-music.js.git
 % cd z-music.js
@@ -13,7 +14,7 @@ Z-MUSIC v1.10 and v2.08 for the web
 ```
 <html>
 <head>
-<script src="dist/zmusic.asm.js"></script>
+<script src="dist/zmusic.js"></script>
 <script>
 // Make XHR to support Promise.
 function xhr (url) {
@@ -37,12 +38,13 @@ Promise.all([
 });
 </script>
 </head>
+<body><button onclick="ZMUSIC.resume()">Unmute</button></body>
 </html>
 ```
 
-## WebAssembly support
-You can use dist/zmusic.js instead of dist/zmusic.asm.js to use WebAssebly
-version. It requires to host dist/zmusic.wasm too.
+## WebAssembly
+Now, z-music.js relies on WebAssembly by default. dist/zmusic.asm.js is still
+available for users who are not ready for WebAssembly, but not maintained well.
 
 ## Initialize with detailed parameters
 
@@ -92,10 +94,19 @@ E.g., FooBar.zpd will be accessed by FOOBAR.ZPD and /FOOBAR.ZPD.
 If someone request, I would add an asynchronous interface to handle ZPD file
 reads in a customized way.
 
-### mobile Safari specific notice
+### Requires a user initiated interaction.
+#### mobile Safari
 Since mobile Safari does not allow us to playback any audio without user
-actions, you need to call the first play() or compileAndPlay() call inside the
+actions, you need to call the first play() or compileAndPlay() call inside an
 event handler for user actions.
+
+#### Others
+Today, other browsers have the same restriction with mobile Safari. You can
+resume audio playback at anytime after you call ZMUSIC.install() by calling
+ZMUSIC.resume() in an event handler for user actions.
+```
+<button onclick="ZMUSIC.resume()">Unmute</button>
+```
 
 ### ZMUSIC.js API
 See src/prolog.js
