@@ -321,6 +321,15 @@ ZMUSIC = {
   },
 
   /**
+   * Resumes AudioContext if it is not running, or suspended. Should be called
+   * from an event handler for user initiated inteactions.
+   */
+  resume: function () {
+    if (audioContext)
+      audioContext.resume();
+  },
+
+  /**
    * Plays ZMD data with ZPD. If ZPD isn't specified, previous data will be
    * reused.
    * @param {ArrayBuffer} zmd ZMD data
