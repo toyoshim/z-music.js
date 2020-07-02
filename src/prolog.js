@@ -277,9 +277,6 @@ var Module = {
   // Dirty hacks to replace previously evaluated Module.arguments during
   // Module.run().
   onRuntimeInitialized: function () {
-    // Resets |shouldRunNow| as this was already evaluated based on
-    // |noInitialRun|.
-    shouldRunNow = true;
     // Resets |calledRun| as this was already set in doRun().
     calledRun = false;
     // Resets this function so that this should not be called recursively during
@@ -291,8 +288,7 @@ var Module = {
     // again with the original arguments after this function finishes.
     // |calledRun| should be already restored during the run() call above.
     shouldRunNow = false;
-  },
-  noInitialRun: true
+  }
 };
 
 ZMUSIC = {
